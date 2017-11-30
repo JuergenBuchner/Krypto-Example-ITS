@@ -14,7 +14,8 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
 
         // Directory Paths 
         private string dataDirPath = "";
-        private string encryptDirPath = "";
+        public string documentsDirPath { get; private set; }
+        public string encryptDirPath { get; private set; }
         private string decryptDirPath = "";
         private string keysDirPath = "";
         private string publicKeyFileName = "";
@@ -23,7 +24,7 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
         // Needed Crypto-Objects
         private CspParameters cspParam;
         private RSACryptoServiceProvider rsaProv;
-        private bool rsaKeysCreated;
+        public bool rsaKeysCreated { get; private set; }
 
         // Needed Parameter
         private string rsaKeyName = "";
@@ -31,9 +32,10 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
         public KryptoHelper()
         {
             dataDirPath = GetDataDirectory();
-            encryptDirPath = dataDirPath + "\\Encrypt";
-            decryptDirPath = dataDirPath + "\\Decrypt";
-            keysDirPath = dataDirPath + "\\Keys";
+            documentsDirPath = dataDirPath + "\\00_Documents";
+            encryptDirPath = dataDirPath + "\\01_Encrypt";
+            decryptDirPath = dataDirPath + "\\02_Decrypt";
+            keysDirPath = dataDirPath + "\\03_Keys";
             publicKeyFileName = "rsaPublicKey.txt";
             symmetricKeysFileName = "aesKeys.txt";
 
@@ -144,19 +146,22 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             }
         }
 
-        private void ImportAESKeys(string filename, byte[] IV, byte[] key)
+        private void ImportAESKeys(string filename, out byte[] IV, out byte[] key, out RijndaelManaged rjndl)
         {
+            IV = null;
+            key = null;
+            rjndl = null;
+
             if (!rsaKeysCreated)
                 return;
 
-            RijndaelManaged rjndl;
             CreateAESKeys(out rjndl);
-            rjndl.Padding = PaddingMode.None;
+            //rjndl.Padding = PaddingMode.None;
 
             byte[] LenK = new byte[4];
             byte[] LenIV = new byte[4];
 
-            string inFile = filename.Substring(0, filename.LastIndexOf(".")) + ".key";
+            string inFile = filename.Substring(0, filename.IndexOf(".")) + ".key";
             string filepath = keysDirPath + "\\" + inFile;
 
             if (!File.Exists(filepath))
@@ -250,14 +255,154 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             status = str.ToString();
         }
 
+        public void EncryptFile(string inFile, out string status)
+        {
+            FileInfo fInfo = new FileInfo(inFile);
+            // Pass the file name without the path.
+            string name = fInfo.Name;
+            // Create instance of Rijndael for
+            // symetric encryption of the data.
+            RijndaelManaged rjndl;
+            //rjndl.KeySize = 256;
+            //rjndl.BlockSize = 256;
+            //rjndl.Mode = CipherMode.CBC;           
+            CreateAESKeys(out rjndl);
+            ICryptoTransform transform = rjndl.CreateEncryptor();
+            ExportAESKeys(rjndl, name);
+
+            // Change the file's extension to ".enc"
+            string outFile = encryptDirPath + "\\" + name + ".enc";
+
+            using (FileStream outFs = new FileStream(outFile, FileMode.Create))
+            {
+
+                // Now write the cipher text using
+                // a CryptoStream for encrypting.
+                using (CryptoStream outStreamEncrypted = new CryptoStream(outFs, transform, CryptoStreamMode.Write))
+                {
+
+                    // By encrypting a chunk at
+                    // a time, you can save memory
+                    // and accommodate large files.
+                    int count = 0;
+                    int offset = 0;
+
+                    // blockSizeBytes can be any arbitrary size.
+                    int blockSizeBytes = rjndl.BlockSize / 8;
+                    byte[] data = new byte[blockSizeBytes];
+                    int bytesRead = 0;
+
+                    using (FileStream inFs = new FileStream( inFile, FileMode.Open))
+                    {
+                        do
+                        {
+                            count = inFs.Read(data, 0, blockSizeBytes);
+                            offset += count;
+                            outStreamEncrypted.Write(data, 0, count);
+                            bytesRead += blockSizeBytes;
+                        }
+                        while (count > 0);
+                        inFs.Close();
+                    }
+                    outStreamEncrypted.FlushFinalBlock();
+                    outStreamEncrypted.Close();
+                }
+                outFs.Close();
+            }
+            status = "File \"" + name +"\" encrypted.";
+        }
+
+        public void DecryptFile(string inFile, out string status)
+        {
+            FileInfo fInfo = new FileInfo(inFile);
+            // Pass the file name without the path.
+            string name = fInfo.Name;
+
+            // Create instance of Rijndael for
+            // symetric decryption of the data.
+            RijndaelManaged rjndl;
+
+            // Consruct the file name for the decrypted file.
+            string outFile = decryptDirPath + "\\" + name.Substring(0, name.LastIndexOf("."));
+
+            // Use FileStream objects to read the encrypted
+            // file (inFs) and save the decrypted file (outFs).
+
+            byte[] IV;
+            byte[] KeyDecrypted;
+            ImportAESKeys(name, out IV, out KeyDecrypted, out rjndl);            
+
+            // Decrypt the key.
+            ICryptoTransform transform = rjndl.CreateDecryptor(KeyDecrypted, IV);
+
+            using (FileStream inFs = new FileStream(inFile, FileMode.Open))
+            {
+
+                // Decrypt the cipher text from
+                // from the FileSteam of the encrypted
+                // file (inFs) into the FileStream
+                // for the decrypted file (outFs).
+                using (FileStream outFs = new FileStream(outFile, FileMode.Create))
+                {
+
+                    int count = 0;
+                    int offset = 0;
+
+                    // blockSizeBytes can be any arbitrary size.
+                    int blockSizeBytes = rjndl.BlockSize / 8;
+                    byte[] data = new byte[blockSizeBytes];
 
 
+                    // By decrypting a chunk a time,
+                    // you can save memory and
+                    // accommodate large files.
 
+                    // Start at the beginning
+                    // of the cipher text.
+                    int startC = 0;
 
+                    inFs.Seek(startC, SeekOrigin.Begin);
+                    using (CryptoStream outStreamDecrypted = new CryptoStream(outFs, transform, CryptoStreamMode.Write))
+                    {
+                        do
+                        {
+                            count = inFs.Read(data, 0, blockSizeBytes);
+                            offset += count;
+                            outStreamDecrypted.Write(data, 0, count);
 
+                        }
+                        while (count > 0);
 
+                        outStreamDecrypted.FlushFinalBlock();
+                        outStreamDecrypted.Close();
+                    }
+                    outFs.Close();
+                }
+                inFs.Close();
+            }
+            status = "File \"" + name + "\" decrypted.";
+        }
+        public void Clear(out string status)
+        {
+            status = "ERROR: Could not clear!";
+            System.IO.DirectoryInfo diEnc = new DirectoryInfo(encryptDirPath);
+            System.IO.DirectoryInfo diDec = new DirectoryInfo(decryptDirPath);
+            System.IO.DirectoryInfo diKey = new DirectoryInfo(keysDirPath);
 
-
-
+            foreach (FileInfo file in diEnc.GetFiles())
+            {
+                file.Delete();
+            }
+            foreach (FileInfo file in diDec.GetFiles())
+            {
+                file.Delete();
+            }
+            foreach (FileInfo file in diKey.GetFiles())
+            {
+                file.Delete();
+            }
+            rsaKeysCreated = false;
+            status = "Cleared folders \"01_Encrypt\" \"02_Decrypt\" and \"03_Keys\".";
+        }
     }
 }
