@@ -50,7 +50,7 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             }
             else
             {
-                // Display a dialog box to select a file to encrypt.
+                // Displaying a filedialog box to select a file to encrypt.
                 openFileDialog.InitialDirectory = crypt.documentsDirPath;
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
@@ -73,7 +73,7 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             }
             else
             {
-                // Display a dialog box to select a file to encrypt.
+                // Displaying a filedialog box to select a file to decrypt.
                 openFileDialog.InitialDirectory = crypt.encryptDirPath;
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {

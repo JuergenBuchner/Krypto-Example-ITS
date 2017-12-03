@@ -135,14 +135,14 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             int lIV = rjndl.IV.Length;
             LenIV = BitConverter.GetBytes(lIV);
 
-            using (FileStream outFs = new FileStream(filepath, FileMode.Create))
+            using (FileStream outFStream = new FileStream(filepath, FileMode.Create))
             {
-                outFs.Write(LenK, 0, 4);
-                outFs.Write(LenIV, 0, 4);
-                outFs.Write(symmkeyEncrypted, 0, lKey);
-                outFs.Write(rjndl.IV, 0, lIV);
+                outFStream.Write(LenK, 0, 4);
+                outFStream.Write(LenIV, 0, 4);
+                outFStream.Write(symmkeyEncrypted, 0, lKey);
+                outFStream.Write(rjndl.IV, 0, lIV);
 
-                outFs.Close();
+                outFStream.Close();
             }
         }
 
@@ -167,13 +167,13 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             if (!File.Exists(filepath))
                 return;
 
-            using (FileStream inFs = new FileStream(filepath, FileMode.Open))
+            using (FileStream inFStream = new FileStream(filepath, FileMode.Open))
             {
-                inFs.Seek(0, SeekOrigin.Begin);
-                inFs.Seek(0, SeekOrigin.Begin);
-                inFs.Read(LenK, 0, 3);
-                inFs.Seek(4, SeekOrigin.Begin);
-                inFs.Read(LenIV, 0, 3);
+                inFStream.Seek(0, SeekOrigin.Begin);
+                inFStream.Seek(0, SeekOrigin.Begin);
+                inFStream.Read(LenK, 0, 3);
+                inFStream.Seek(4, SeekOrigin.Begin);
+                inFStream.Read(LenIV, 0, 3);
 
                 // Convert the lengths to integer values.
                 int lenK = BitConverter.ToInt32(LenK, 0);
@@ -183,7 +183,7 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
                 // the ciphter text (startC)
                 // and its length(lenC).
                 int startC = lenK + lenIV + 8;
-                int lenC = (int)inFs.Length - startC;
+                int lenC = (int)inFStream.Length - startC;
 
                 // Create the byte arrays for
                 // the encrypted Rijndael key,
@@ -194,10 +194,10 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
                 // Extract the key and IV
                 // starting from index 8
                 // after the length values.
-                inFs.Seek(8, SeekOrigin.Begin);
-                inFs.Read(KeyEncrypted, 0, lenK);
-                inFs.Seek(8 + lenK, SeekOrigin.Begin);
-                inFs.Read(IV, 0, lenIV);
+                inFStream.Seek(8, SeekOrigin.Begin);
+                inFStream.Read(KeyEncrypted, 0, lenK);
+                inFStream.Seek(8 + lenK, SeekOrigin.Begin);
+                inFStream.Read(IV, 0, lenIV);
 
                 // Use RSACryptoServiceProvider
                 // to decrypt the Rijndael key.
@@ -223,8 +223,6 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
 
             status = "PublicKey Exported: " + publicKeyFileName;
         }
-
-        // Benötigt ????????????? 
 
         public void ImportPublicKey(string keyName, out string status)
         {
@@ -255,133 +253,98 @@ namespace Krypto_Example_ITS_Hiesmair_Buchner
             status = str.ToString();
         }
 
-        public void EncryptFile(string inFile, out string status)
+        public void EncryptFile(string inFilepath, out string status)
         {
-            FileInfo fInfo = new FileInfo(inFile);
-            // Pass the file name without the path.
-            string name = fInfo.Name;
-            // Create instance of Rijndael for
-            // symetric encryption of the data.
-            RijndaelManaged rjndl;
-            //rjndl.KeySize = 256;
-            //rjndl.BlockSize = 256;
-            //rjndl.Mode = CipherMode.CBC;           
-            CreateAESKeys(out rjndl);
-            ICryptoTransform transform = rjndl.CreateEncryptor();
+            FileInfo fileInfo = new FileInfo(inFilepath);           
+            string name = fileInfo.Name; // File name without path
+            
+            RijndaelManaged rjndl; // Object for symetric encryption
+            CreateAESKeys(out rjndl); // defining keysize, blocksize, mode
+            ICryptoTransform cryptoTransform = rjndl.CreateEncryptor();
+
+            // Exporting the AES keys
             ExportAESKeys(rjndl, name);
 
-            // Change the file's extension to ".enc"
-            string outFile = encryptDirPath + "\\" + name + ".enc";
+            string outFilepath = encryptDirPath + "\\" + name + ".enc";
 
-            using (FileStream outFs = new FileStream(outFile, FileMode.Create))
+            using (FileStream outFStrem = new FileStream(outFilepath, FileMode.Create))
             {
 
-                // Now write the cipher text using
-                // a CryptoStream for encrypting.
-                using (CryptoStream outStreamEncrypted = new CryptoStream(outFs, transform, CryptoStreamMode.Write))
+                // CryptoStream: Stream for encrypting.
+                using (CryptoStream outStremEnc = new CryptoStream(outFStrem, cryptoTransform, CryptoStreamMode.Write))
                 {
+                    int cnt = 0;
 
-                    // By encrypting a chunk at
-                    // a time, you can save memory
-                    // and accommodate large files.
-                    int count = 0;
-                    int offset = 0;
-
-                    // blockSizeBytes can be any arbitrary size.
-                    int blockSizeBytes = rjndl.BlockSize / 8;
+                    int blockSizeBytes = rjndl.BlockSize / 8; //From bitsize to bytes
                     byte[] data = new byte[blockSizeBytes];
                     int bytesRead = 0;
 
-                    using (FileStream inFs = new FileStream( inFile, FileMode.Open))
+                    using (FileStream inFStream = new FileStream( inFilepath, FileMode.Open))
                     {
                         do
                         {
-                            count = inFs.Read(data, 0, blockSizeBytes);
-                            offset += count;
-                            outStreamEncrypted.Write(data, 0, count);
+                            cnt = inFStream.Read(data, 0, blockSizeBytes);
+                            outStremEnc.Write(data, 0, cnt);
                             bytesRead += blockSizeBytes;
                         }
-                        while (count > 0);
-                        inFs.Close();
+                        while (cnt > 0);
+                        inFStream.Close();
                     }
-                    outStreamEncrypted.FlushFinalBlock();
-                    outStreamEncrypted.Close();
+                    outStremEnc.FlushFinalBlock();
+                    outStremEnc.Close();
                 }
-                outFs.Close();
+                outFStrem.Close();
             }
             status = "File \"" + name +"\" encrypted.";
         }
 
-        public void DecryptFile(string inFile, out string status)
+        public void DecryptFile(string inFilepath, out string status)
         {
-            FileInfo fInfo = new FileInfo(inFile);
-            // Pass the file name without the path.
-            string name = fInfo.Name;
+            FileInfo fileInfo = new FileInfo(inFilepath);
+            string name = fileInfo.Name; // File name without path
 
-            // Create instance of Rijndael for
-            // symetric decryption of the data.
-            RijndaelManaged rjndl;
+            RijndaelManaged rjndl; // Object for symetric encryption
 
-            // Consruct the file name for the decrypted file.
-            string outFile = decryptDirPath + "\\" + name.Substring(0, name.LastIndexOf("."));
+            string outFilepath = decryptDirPath + "\\" + name.Substring(0, name.LastIndexOf("."));
 
-            // Use FileStream objects to read the encrypted
-            // file (inFs) and save the decrypted file (outFs).
-
+            // Importing the AES key from file
             byte[] IV;
             byte[] KeyDecrypted;
             ImportAESKeys(name, out IV, out KeyDecrypted, out rjndl);            
 
-            // Decrypt the key.
+            // Decrypting the key.
             ICryptoTransform transform = rjndl.CreateDecryptor(KeyDecrypted, IV);
 
-            using (FileStream inFs = new FileStream(inFile, FileMode.Open))
+            // Reading the encrypted file -> decryption using AES -> writing the decrypted data to file 
+            using (FileStream inFStream = new FileStream(inFilepath, FileMode.Open))
             {
-
-                // Decrypt the cipher text from
-                // from the FileSteam of the encrypted
-                // file (inFs) into the FileStream
-                // for the decrypted file (outFs).
-                using (FileStream outFs = new FileStream(outFile, FileMode.Create))
+                using (FileStream outFStream = new FileStream(outFilepath, FileMode.Create))
                 {
+                    int cnt = 0;
 
-                    int count = 0;
-                    int offset = 0;
-
-                    // blockSizeBytes can be any arbitrary size.
-                    int blockSizeBytes = rjndl.BlockSize / 8;
+                    int blockSizeBytes = rjndl.BlockSize / 8; //From bitsize to bytes
                     byte[] data = new byte[blockSizeBytes];
 
-
-                    // By decrypting a chunk a time,
-                    // you can save memory and
-                    // accommodate large files.
-
-                    // Start at the beginning
-                    // of the cipher text.
-                    int startC = 0;
-
-                    inFs.Seek(startC, SeekOrigin.Begin);
-                    using (CryptoStream outStreamDecrypted = new CryptoStream(outFs, transform, CryptoStreamMode.Write))
+                    inFStream.Seek(0, SeekOrigin.Begin);
+                    using (CryptoStream outStreamDecrypted = new CryptoStream(outFStream, transform, CryptoStreamMode.Write))
                     {
                         do
                         {
-                            count = inFs.Read(data, 0, blockSizeBytes);
-                            offset += count;
-                            outStreamDecrypted.Write(data, 0, count);
-
+                            cnt = inFStream.Read(data, 0, blockSizeBytes);
+                            outStreamDecrypted.Write(data, 0, cnt);
                         }
-                        while (count > 0);
+                        while (cnt > 0);
 
                         outStreamDecrypted.FlushFinalBlock();
                         outStreamDecrypted.Close();
                     }
-                    outFs.Close();
+                    outFStream.Close();
                 }
-                inFs.Close();
+                inFStream.Close();
             }
             status = "File \"" + name + "\" decrypted.";
         }
+
         public void Clear(out string status)
         {
             status = "ERROR: Could not clear!";
